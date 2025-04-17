@@ -2,14 +2,12 @@ name: Aggiorna catalogo libri
 
 on:
   schedule:
-    - cron: '0 4 * * *'  # Ogni giorno alle 04:00 UTC
-  workflow_dispatch:
+    - cron: '0 4 * * *'  # Ogni giorno alle 04:00 UTC (06:00 italiane)
+  workflow_dispatch:     # Avvio manuale da GitHub
 
 jobs:
   build:
     runs-on: ubuntu-latest
-    env:
-      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
 
     steps:
       - name: Checkout del repository
@@ -21,12 +19,12 @@ jobs:
           python-version: '3.10'
 
       - name: Installa dipendenze
-        run: pip install requests
+        run: pip install requests beautifulsoup4
 
-      - name: Esegui scraper AI
+      - name: Esegui scraper
         run: |
-          python scripts/scraper_ai.py
-          echo "Scraping AI completato!"
+          python scripts/scraper.py
+          echo "✅ Scraping completato con successo"
 
       - name: Commit e push aggiornamento
         run: |
