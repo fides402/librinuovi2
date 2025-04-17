@@ -18,7 +18,7 @@
   <div class="container mx-auto px-4 py-8">
     <header class="mb-10 text-center">
       <h1 class="text-4xl font-bold text-indigo-700 mb-2">RecentBooks</h1>
-      <p class="text-xl text-gray-600">Libri più recenti (ordinati per data di pubblicazione) in USA e Italia<br>categorie: Business, Psicologia, Self-Help, Società e Filosofia</p>
+      <p class="text-xl text-gray-600">Libri pubblicati negli ultimi 30 giorni (lingua italiana e inglese) nelle categorie Business, Psicologia, Self-Help, Società e Filosofia</p>
     </header>
     <div class="text-center mb-8">
       <button onclick="trovaLibri()" class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 px-6 rounded-full inline-flex items-center">
@@ -29,7 +29,7 @@
       <div class="loading"></div>
     </div>
     <div id="resultsSection" class="hidden">
-      <h2 class="text-2xl font-semibold text-gray-800 mb-4 text-center">Risultati della ricerca</h2>
+      <h2 class="text-2xl font-semibold text-gray-800 mb-4 text-center">Risultati</h2>
       <div id="resultsContainer" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6"></div>
     </div>
   </div>
@@ -42,72 +42,64 @@
       resultsSection.classList.add('hidden');
       loadingIndicator.classList.remove('hidden');
 
-      const categories = ["Business", "Psychology", "Self-Help", "Social Science", "Philosophy"];
-      const languages = ['en', 'it'];
-      const maxPerCat = 20;
-      let allBooks = [];
+      const categories = ['business','psychology','self-help','social-science','philosophy'];
+      const languages = [{code:'eng',label:'Inglese'},{code:'ita',label:'Italiano'}];
+      const maxPerCat = 10;
+      const oneMonthAgo = Date.now() - 30*24*60*60*1000;
+      let books = [];
 
       for (const lang of languages) {
         for (const cat of categories) {
-          const url = `https://www.googleapis.com/books/v1/volumes?q=subject:${encodeURIComponent(cat)}&orderBy=newest&maxResults=${maxPerCat}&langRestrict=${lang}`;
+          const url = `https://openlibrary.org/search.json?subject=${cat}&language=${lang.code}&limit=${maxPerCat}`;
           try {
             const res = await fetch(url);
             const data = await res.json();
-            if (!data.items) continue;
-            data.items.forEach(item => {
-              const info = item.volumeInfo;
-              allBooks.push({
-                titolo: info.title || 'Sconosciuto',
-                autore: info.authors ? info.authors.join(', ') : 'Sconosciuto',
-                copertina: info.imageLinks?.thumbnail?.replace('http:','https:'),
-                annas_archive: `https://annas-archive.org/search?q=${encodeURIComponent(info.title || '')}`,
-                publishedDate: info.publishedDate || 'N/A'
+            if (!data.docs) continue;
+            data.docs.forEach(doc => {
+              // OpenLibrary publish_date may be array of strings
+              const dates = doc.publish_date || [];
+              // find a date within last 30 days
+              const recent = dates.find(d => {
+                const dt = Date.parse(d);
+                return !isNaN(dt) && dt >= oneMonthAgo;
+              });
+              if (!recent) return;
+              books.push({
+                titolo: doc.title || 'Sconosciuto',
+                autore: doc.author_name ? doc.author_name.join(', ') : 'Sconosciuto',
+                copertina: doc.cover_i ? `https://covers.openlibrary.org/b/id/${doc.cover_i}-M.jpg` : null,
+                annas_archive: `https://annas-archive.org/search?q=${encodeURIComponent(doc.title)}`
               });
             });
-          } catch (e) {
-            console.error(`Errore fetch ${cat} ${lang}:`, e);
+          } catch(e) {
+            console.error('OpenLibrary error:',e);
           }
         }
       }
-
-      // Rimuovi duplicati
-      const seen = new Set();
-      allBooks = allBooks.filter(b => {
-        const key = b.titolo + '|' + b.autore;
-        if (seen.has(key)) return false;
-        seen.add(key);
-        return true;
-      });
-
-      if (allBooks.length === 0) {
-        resultsContainer.innerHTML = '<p class="text-center text-gray-500 col-span-full">❌ Nessun libro trovato. Prova più tardi.</p>';
-        resultsSection.classList.remove('hidden');
-        loadingIndicator.classList.add('hidden');
-        return;
+      // dedup
+      const seen = new Set(); books = books.filter(b=>{const k=b.titolo+'|'+b.autore;return seen.has(k)?false:seen.add(k)});
+      if (books.length===0) {
+        resultsContainer.innerHTML = '<p class="text-center text-gray-500 col-span-full">❌ Nessun libro recente trovato. Prova più tardi.</p>';
+        resultsSection.classList.remove('hidden'); loadingIndicator.classList.add('hidden'); return;
       }
-
-      allBooks.forEach(book => {
-        const card = document.createElement('div');
-        card.className = 'book-card bg-white rounded-lg shadow-md overflow-hidden flex flex-col';
-        card.innerHTML = `
+      books.forEach(b=>{
+        const card=document.createElement('div');card.className='book-card bg-white rounded-lg shadow-md overflow-hidden flex flex-col';
+        card.innerHTML=`
           <div class="p-4 flex justify-center bg-gray-50">
-            <img src="${book.copertina || 'https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.0.0/svgs/solid/book.svg'}" alt="Copertina" class="book-cover">
+            ${(b.copertina)?`<img src="${b.copertina}" alt="Copertina" class="book-cover">`:`<i class="fas fa-book fa-5x text-gray-300"></i>`}
           </div>
           <div class="p-4 flex-grow">
-            <h3 class="font-bold text-lg text-indigo-700 line-clamp-2">${book.titolo}</h3>
-            <p class="text-gray-700 mt-2"><i class="fas fa-user-edit text-gray-500 mr-1"></i> ${book.autore}</p>
-            <p class="text-gray-500 text-sm mt-1"><i class="fas fa-calendar-alt mr-1"></i> ${book.publishedDate}</p>
+            <h3 class="font-bold text-lg text-indigo-700 line-clamp-2">${b.titolo}</h3>
+            <p class="text-gray-700 mt-2"><i class="fas fa-user-edit text-gray-500 mr-1"></i>${b.autore}</p>
           </div>
           <div class="p-4 pt-2 border-t border-gray-100">
-            <a href="${book.annas_archive}" target="_blank" class="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white text-center py-2 px-4 rounded-md text-sm">
+            <a href="${b.annas_archive}" target="_blank" class="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white text-center py-2 px-4 rounded-md text-sm">
               <i class="fas fa-book-open mr-1"></i> Anna's Archive
             </a>
           </div>`;
         resultsContainer.appendChild(card);
       });
-
-      resultsSection.classList.remove('hidden');
-      loadingIndicator.classList.add('hidden');
+      resultsSection.classList.remove('hidden'); loadingIndicator.classList.add('hidden');
     }
   </script>
 </body>
