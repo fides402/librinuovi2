@@ -32,12 +32,6 @@
     </div>
   </div>
   <script>
-    const apiKey = 'AIzaSyBVtXwnVXilsNqLx6of2HG2jiYwAWs-btg';
-    const categories = ['Business','Psychology','Self-Help','Social Science','Philosophy'];
-    const languages = ['en','it'];
-    const oneWeekAgo = Date.now() - 7*24*60*60*1000;
-    const maxResults = 40;
-
     document.getElementById('searchBtn').addEventListener('click', async () => {
       const btn = document.getElementById('searchBtn');
       const loader = document.getElementById('loadingIndicator');
@@ -48,70 +42,40 @@
       section.classList.add('hidden');
       container.innerHTML = '';
 
-      let all = [];
-      for (const lang of languages) {
-        for (const cat of categories) {
-          const url = `https://www.googleapis.com/books/v1/volumes?q=subject:${encodeURIComponent(cat)}&orderBy=newest&maxResults=${maxResults}&langRestrict=${lang}&key=${apiKey}`;
-          try {
-            const res = await fetch(url);
-            const data = await res.json();
-            if (!data.items) continue;
-            data.items.forEach(item => {
-              const info = item.volumeInfo;
-              const dateStr = info.publishedDate;
-              if (!dateStr) return;
-              let time;
-              if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) time = Date.parse(dateStr);
-              else if (/^\d{4}-\d{2}$/.test(dateStr)) time = Date.parse(dateStr + '-01');
-              else if (/^\d{4}$/.test(dateStr)) time = Date.parse(dateStr + '-01-01');
-              if (!time || time < oneWeekAgo) return;
-              all.push({
-                title: info.title || 'Sconosciuto',
-                author: info.authors ? info.authors.join(', ') : 'Sconosciuto',
-                cover: info.imageLinks?.thumbnail?.replace('http:','https:'),
-                archiveLink: `https://annas-archive.org/search?q=${encodeURIComponent(info.title)}`
-              });
-            });
-          } catch(e) {
-            console.error('Errore fetch', e);
-          }
+      try {
+        const res = await fetch('books.json');
+        if (!res.ok) throw new Error('books.json non trovato');
+        const books = await res.json();
+        if (!Array.isArray(books) || books.length === 0) {
+          container.innerHTML = '<p class="text-center text-gray-500">❌ Nessun libro recente trovato.</p>';
+        } else {
+          books.forEach(b => {
+            const card = document.createElement('div');
+            card.className = 'book-card bg-white rounded-lg shadow-md overflow-hidden flex flex-col';
+            card.innerHTML = `
+              <div class="p-4 bg-gray-50 flex justify-center">
+                ${b.cover ? `<img src="${b.cover}" alt="${b.title}" class="book-cover">` : `<i class="fas fa-book fa-5x text-gray-300"></i>`}
+              </div>
+              <div class="p-4 flex-grow">
+                <h3 class="font-bold text-lg text-indigo-700 line-clamp-2">${b.title}</h3>
+                <p class="text-gray-700 mt-1">${b.author}</p>
+              </div>
+              <div class="p-4 pt-2 border-t border-gray-100">
+                <a href="${b.archiveLink}" target="_blank" class="block bg-indigo-600 hover:bg-indigo-700 text-white text-center py-2 rounded-md text-sm">
+                  <i class="fas fa-archive mr-1"></i> Anna's Archive
+                </a>
+              </div>`;
+            container.appendChild(card);
+          });
         }
+      } catch (error) {
+        console.error(error);
+        container.innerHTML = `<p class="text-center text-red-500">❌ Errore: ${error.message}. Esegui il script generate_books.js per creare books.json.</p>`;
+      } finally {
+        loader.classList.add('hidden');
+        btn.disabled = false;
+        section.classList.remove('hidden');
       }
-      // dedup
-      const seen = new Set();
-      all = all.filter(b => {
-        const key = b.title + '|' + b.author;
-        if (seen.has(key)) return false;
-        seen.add(key);
-        return true;
-      });
-
-      loader.classList.add('hidden');
-      btn.disabled = false;
-
-      if (!all.length) {
-        container.innerHTML = '<p class="text-center text-gray-500">❌ Nessun libro recente trovato.</p>';
-      } else {
-        all.forEach(b => {
-          const card = document.createElement('div');
-          card.className = 'book-card bg-white rounded-lg shadow-md overflow-hidden flex flex-col';
-          card.innerHTML = `
-            <div class="p-4 bg-gray-50 flex justify-center">
-              ${b.cover ? `<img src="${b.cover}" alt="${b.title}" class="book-cover">` : `<i class="fas fa-book fa-5x text-gray-300"></i>`}
-            </div>
-            <div class="p-4 flex-grow">
-              <h3 class="font-bold text-lg text-indigo-700 line-clamp-2">${b.title}</h3>
-              <p class="text-gray-700 mt-1">${b.author}</p>
-            </div>
-            <div class="p-4 pt-2 border-t border-gray-100">
-              <a href="${b.archiveLink}" target="_blank" class="block bg-indigo-600 hover:bg-indigo-700 text-white text-center py-2 rounded-md text-sm">
-                <i class="fas fa-archive mr-1"></i> Anna's Archive
-              </a>
-            </div>`;
-          container.appendChild(card);
-        });
-      }
-      section.classList.remove('hidden');
     });
   </script>
 </body>
