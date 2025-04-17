@@ -18,7 +18,7 @@
   <div class="container mx-auto px-4 py-8">
     <header class="text-center mb-8">
       <h1 class="text-4xl font-bold text-indigo-700 mb-2">RecentBooks</h1>
-      <p class="text-lg text-gray-600">Libri pubblicati nell'ultimo mese, disponibili all'acquisto (Business, Psicologia, Self-Help, Società, Filosofia)</p>
+      <p class="text-lg text-gray-600">Libri pubblicati nell'ultimo mese (Business, Psicologia, Self-Help, Società, Filosofia)</p>
     </header>
     <div class="text-center mb-6">
       <button id="searchBtn" class="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-3 px-6 rounded-full inline-flex items-center">
@@ -38,7 +38,7 @@
     async function trovaLibri() {
       const apiKey = 'AIzaSyBVtXwnVXilsNqLx6of2HG2jiYwAWs-btg';
       const categories = ['Business','Psychology','Self-Help','Social Science','Philosophy'];
-      const languages = ['en','it'];
+      const locales = [ {code:'en',domain:'com'}, {code:'it',domain:'it'} ];
       const maxPerCat = 20;
       const oneMonthAgo = Date.now() - 30*24*60*60*1000;
 
@@ -51,38 +51,35 @@
       loading.classList.remove('hidden');
 
       let allBooks = [];
-      for (const lang of languages) {
+      for (const locale of locales) {
         for (const cat of categories) {
           const query = `subject:${cat}`;
-          const url = `https://www.googleapis.com/books/v1/volumes?q=${encodeURIComponent(query)}&orderBy=newest&maxResults=${maxPerCat}&langRestrict=${lang}&key=${apiKey}`;
+          const url = `https://www.googleapis.com/books/v1/volumes?q=${encodeURIComponent(query)}&orderBy=newest&maxResults=${maxPerCat}&langRestrict=${locale.code}&key=${apiKey}`;
           try {
             const res = await fetch(url);
-            const { items } = await res.json();
-            if (!items) continue;
-            items.forEach(item => {
+            const data = await res.json();
+            if (!data.items) continue;
+            data.items.forEach(item => {
               const info = item.volumeInfo;
-              const sale = item.saleInfo;
-              if (sale?.saleability === 'FOR_SALE') {
-                const dateStr = info.publishedDate || '';
-                let pub = null;
-                if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) pub = Date.parse(dateStr);
-                else if (/^\d{4}-\d{2}$/.test(dateStr)) pub = Date.parse(dateStr + '-01');
-                else if (/^\d{4}$/.test(dateStr)) pub = Date.parse(dateStr + '-01-01');
-                if (pub && pub >= oneMonthAgo) {
-                  allBooks.push({
-                    title: info.title || 'Sconosciuto',
-                    author: info.authors?.join(', ') || 'Sconosciuto',
-                    cover: info.imageLinks?.thumbnail?.replace('http:', 'https:'),
-                    link: sale.buyLink || info.infoLink,
-                    date: dateStr
-                  });
-                }
-              }
+              const dateStr = info.publishedDate;
+              if (!dateStr) return;
+              let pubTime = null;
+              if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) pubTime = Date.parse(dateStr);
+              else if (/^\d{4}-\d{2}$/.test(dateStr)) pubTime = Date.parse(dateStr+'-01');
+              else if (/^\d{4}$/.test(dateStr)) pubTime = Date.parse(dateStr+'-01-01');
+              if (!pubTime || pubTime < oneMonthAgo) return;
+              allBooks.push({
+                title: info.title || 'Sconosciuto',
+                author: info.authors ? info.authors.join(', ') : 'Sconosciuto',
+                cover: info.imageLinks?.thumbnail?.replace('http:','https:'),
+                date: dateStr,
+                link: `https://www.amazon.${locale.domain}/s?k=${encodeURIComponent(info.title)}`
+              });
             });
-          } catch (err) { console.error(err); }
+          } catch (err) { console.error('Fetch error', err); }
         }
       }
-      // deduplicate
+      // Dedup
       const seen = new Set();
       allBooks = allBooks.filter(b => {
         const key = b.title + '|' + b.author;
@@ -93,10 +90,11 @@
 
       loading.classList.add('hidden');
       if (!allBooks.length) {
-        resultsContainer.innerHTML = `<p class="text-center text-gray-500 col-span-full">Nessun libro recente disponibile.</p>`;
+        resultsContainer.innerHTML = `<p class="text-center text-gray-500 col-span-full">❌ Nessun libro recente disponibile.</p>`;
         resultsSection.classList.remove('hidden');
         return;
       }
+      // Render
       allBooks.forEach(b => {
         const card = document.createElement('div');
         card.className = 'book-card bg-white rounded-lg shadow-md overflow-hidden flex flex-col';
