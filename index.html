@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>RecentBooks - Libri pubblicati ultima settimana</title>
+  <title>RecentBooks - Libri ultima settimana</title>
   <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
   <link href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.0.0/css/all.min.css" rel="stylesheet">
   <style>
@@ -18,11 +18,12 @@
   <div class="container mx-auto px-4 py-8">
     <header class="text-center mb-6">
       <h1 class="text-4xl font-bold text-indigo-700 mb-2">RecentBooks</h1>
-      <p class="text-lg text-gray-600">Libri pubblicati nell'ultima settimana in USA e Italia<br>Categorie: Business, Psicologia, Self-Help, Società e Filosofia</p>
+      <p class="text-lg text-gray-600">Libri pubblicati nell'ultima settimana (USA &amp; Italia)<br>Categorie: Business, Psicologia, Self-Help, Società, Filosofia</p>
     </header>
     <div class="text-center mb-8">
       <button id="searchBtn" class="inline-flex items-center bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-3 px-6 rounded-full">
-        <i class="fas fa-search mr-2"></i> Trova Libri</button>
+        <i class="fas fa-search mr-2"></i> Trova Libri
+      </button>
     </div>
     <div id="loadingIndicator" class="hidden flex justify-center my-8"><div class="loading"></div></div>
     <section id="resultsSection" class="hidden">
@@ -31,88 +32,52 @@
     </section>
   </div>
   <script>
-    document.getElementById('searchBtn').addEventListener('click', trovaLibri);
-    async function trovaLibri() {
-      const apiKey = 'AIzaSyBVtXwnVXilsNqLx6of2HG2jiYwAWs-btg';
-      const categories = ['Business','Psychology','Self-Help','Social Science','Philosophy'];
-      const locales = [{code:'en', label:'USA'},{code:'it', label:'ITA'}];
-      const maxPerCat = 20;
-      const oneWeekAgo = Date.now() - 7*24*60*60*1000;
+    document.getElementById('searchBtn').addEventListener('click', loadBooks);
 
+    async function loadBooks() {
       const btn = document.getElementById('searchBtn');
       const loader = document.getElementById('loadingIndicator');
-      const resultsSection = document.getElementById('resultsSection');
-      const resultsContainer = document.getElementById('resultsContainer');
-
+      const section = document.getElementById('resultsSection');
+      const container = document.getElementById('resultsContainer');
       btn.disabled = true;
-      resultsContainer.innerHTML = '';
-      resultsSection.classList.add('hidden');
       loader.classList.remove('hidden');
+      section.classList.add('hidden');
+      container.innerHTML = '';
 
-      let allBooks = [];
-      for (const loc of locales) {
-        for (const cat of categories) {
-          const url = `https://www.googleapis.com/books/v1/volumes?q=subject:${encodeURIComponent(cat)}&orderBy=newest&maxResults=${maxPerCat}&langRestrict=${loc.code}&key=${apiKey}`;
-          try {
-            const res = await fetch(url);
-            const data = await res.json();
-            if (!data.items) continue;
-            data.items.forEach(item => {
-              const info = item.volumeInfo;
-              const dateStr = info.publishedDate;
-              if (!dateStr) return;
-              let pubTime;
-              if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) pubTime = Date.parse(dateStr);
-              else if (/^\d{4}-\d{2}$/.test(dateStr)) pubTime = Date.parse(dateStr+'-01');
-              else if (/^\d{4}$/.test(dateStr)) pubTime = Date.parse(dateStr+'-01-01');
-              if (!pubTime || pubTime < oneWeekAgo) return;
-              allBooks.push({
-                title: info.title || 'Sconosciuto',
-                author: info.authors ? info.authors.join(', ') : 'Sconosciuto',
-                cover: info.imageLinks?.thumbnail?.replace('http:','https:'),
-                archiveLink: `https://annas-archive.org/search?q=${encodeURIComponent(info.title)}`
-              });
-            });
-          } catch (e) { console.error('Errore fetch', e); }
+      try {
+        const res = await fetch('books.json');
+        if (!res.ok) throw new Error('Impossibile caricare books.json');
+        const books = await res.json();
+        if (!Array.isArray(books) || books.length === 0) {
+          container.innerHTML = '<p class="text-center text-gray-500 col-span-full">❌ Nessun libro recente trovato.</p>';
+        } else {
+          books.forEach(b => {
+            const card = document.createElement('div');
+            card.className = 'book-card bg-white rounded-lg shadow-md overflow-hidden flex flex-col';
+            card.innerHTML = `
+              <div class="p-4 bg-gray-50 flex justify-center">
+                ${b.cover ? `<img src="${b.cover}" alt="${b.title}" class="book-cover">` : `<i class="fas fa-book fa-5x text-gray-300"></i>`}
+              </div>
+              <div class="p-4 flex-grow">
+                <h3 class="font-bold text-lg text-indigo-700 line-clamp-2">${b.title}</h3>
+                <p class="text-gray-700 mt-1">${b.author}</p>
+              </div>
+              <div class="p-4 pt-2 border-t border-gray-100">
+                <a href="${b.archiveLink}" target="_blank" class="block bg-indigo-600 hover:bg-indigo-700 text-white text-center py-2 rounded-md text-sm">
+                  <i class="fas fa-archive mr-1"></i> Anna's Archive
+                </a>
+              </div>`;
+            container.appendChild(card);
+          });
         }
+      } catch (error) {
+        console.error(error);
+        container.innerHTML = `<p class="text-center text-red-500">❌ Errore: ${error.message}</p>`;
+      } finally {
+        loader.classList.add('hidden');
+        btn.disabled = false;
+        section.classList.remove('hidden');
       }
-      // dedup
-      const seen = new Set();
-      allBooks = allBooks.filter(b => {
-        const key = b.title+'|'+b.author;
-        if (seen.has(key)) return false;
-        seen.add(key);
-        return true;
-      });
-
-      loader.classList.add('hidden');
-      btn.disabled = false;
-
-      if (!allBooks.length) {
-        resultsContainer.innerHTML = `<p class="text-center text-gray-500 col-span-full">❌ Nessun libro recente trovato.</p>`;
-        resultsSection.classList.remove('hidden');
-        return;
-      }
-
-      allBooks.forEach(b => {
-        const card = document.createElement('div');
-        card.className = 'book-card bg-white rounded-lg shadow-md overflow-hidden flex flex-col';
-        card.innerHTML = `
-          <div class="p-4 bg-gray-50 flex justify-center">
-            ${b.cover?`<img src="${b.cover}" alt="${b.title}" class="book-cover">`:`<i class="fas fa-book fa-5x text-gray-300"></i>`}
-          </div>
-          <div class="p-4 flex-grow">
-            <h3 class="font-bold text-lg text-indigo-700 line-clamp-2">${b.title}</h3>
-            <p class="text-gray-700 mt-1">${b.author}</p>
-          </div>
-          <div class="p-4 pt-2 border-t border-gray-100">
-            <a href="${b.archiveLink}" target="_blank" class="block bg-indigo-600 hover:bg-indigo-700 text-white text-center py-2 rounded-md text-sm">
-              <i class="fas fa-archive mr-1"></i> Anna's Archive
-            </a>
-          </div>`;
-        resultsContainer.appendChild(card);
-      });
-      resultsSection.classList.remove('hidden');
     }
   </script>
 </body>
