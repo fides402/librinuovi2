@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>RecentBooks - Nuovi libri ultimi 30 giorni</title>
+  <title>RecentBooks - Nuovi libri recenti</title>
   <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
   <link href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.0.0/css/all.min.css" rel="stylesheet">
   <style>
@@ -18,7 +18,7 @@
   <div class="container mx-auto px-4 py-8">
     <header class="mb-10 text-center">
       <h1 class="text-4xl font-bold text-indigo-700 mb-2">RecentBooks</h1>
-      <p class="text-xl text-gray-600">Libri pubblicati negli ultimi 30 giorni in USA e Italia, categorie Business, Psicologia, Self-Help, Società e Filosofia</p>
+      <p class="text-xl text-gray-600">Libri più recenti (ordinati per data di pubblicazione) in USA e Italia<br>categorie: Business, Psicologia, Self-Help, Società e Filosofia</p>
     </header>
     <div class="text-center mb-8">
       <button onclick="trovaLibri()" class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 px-6 rounded-full inline-flex items-center">
@@ -44,35 +44,24 @@
 
       const categories = ["Business", "Psychology", "Self-Help", "Social Science", "Philosophy"];
       const languages = ['en', 'it'];
-      const today = new Date();
-      const oneMonthAgo = new Date(today.getTime() - 30*24*60*60*1000);
-      const maxPerCat = 40;
+      const maxPerCat = 20;
       let allBooks = [];
 
       for (const lang of languages) {
         for (const cat of categories) {
-          const query = `subject:"${cat}"`;
-          const url = `https://www.googleapis.com/books/v1/volumes?q=${encodeURIComponent(query)}&orderBy=newest&maxResults=${maxPerCat}&langRestrict=${lang}`;
+          const url = `https://www.googleapis.com/books/v1/volumes?q=subject:${encodeURIComponent(cat)}&orderBy=newest&maxResults=${maxPerCat}&langRestrict=${lang}`;
           try {
             const res = await fetch(url);
             const data = await res.json();
             if (!data.items) continue;
-            data.items.forEach(book => {
-              const pub = book.volumeInfo.publishedDate || '';
-              let pubDate = null;
-              if (/^\d{4}-\d{2}-\d{2}$/.test(pub)) {
-                pubDate = new Date(pub);
-              } else if (/^\d{4}-\d{2}$/.test(pub)) {
-                pubDate = new Date(pub + '-01');
-              } else if (/^\d{4}$/.test(pub)) {
-                pubDate = new Date(pub + '-01-01');
-              }
-              if (!pubDate || pubDate < oneMonthAgo) return;
+            data.items.forEach(item => {
+              const info = item.volumeInfo;
               allBooks.push({
-                titolo: book.volumeInfo.title || 'Sconosciuto',
-                autore: book.volumeInfo.authors ? book.volumeInfo.authors.join(', ') : 'Sconosciuto',
-                copertina: book.volumeInfo.imageLinks?.thumbnail?.replace('http:','https:'),
-                annas_archive: `https://annas-archive.org/search?q=${encodeURIComponent(book.volumeInfo.title)}`
+                titolo: info.title || 'Sconosciuto',
+                autore: info.authors ? info.authors.join(', ') : 'Sconosciuto',
+                copertina: info.imageLinks?.thumbnail?.replace('http:','https:'),
+                annas_archive: `https://annas-archive.org/search?q=${encodeURIComponent(info.title || '')}`,
+                publishedDate: info.publishedDate || 'N/A'
               });
             });
           } catch (e) {
@@ -81,17 +70,17 @@
         }
       }
 
-      // Rimuovi duplicati base titolo-autore
-      const unique = [];
+      // Rimuovi duplicati
       const seen = new Set();
-      allBooks.forEach(b => {
+      allBooks = allBooks.filter(b => {
         const key = b.titolo + '|' + b.autore;
-        if (!seen.has(key)) { seen.add(key); unique.push(b); }
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
       });
-      allBooks = unique;
 
       if (allBooks.length === 0) {
-        resultsContainer.innerHTML = '<p class="text-center text-gray-500 col-span-full">❌ Nessun libro trovato negli ultimi 30 giorni per i filtri impostati.</p>';
+        resultsContainer.innerHTML = '<p class="text-center text-gray-500 col-span-full">❌ Nessun libro trovato. Prova più tardi.</p>';
         resultsSection.classList.remove('hidden');
         loadingIndicator.classList.add('hidden');
         return;
@@ -107,6 +96,7 @@
           <div class="p-4 flex-grow">
             <h3 class="font-bold text-lg text-indigo-700 line-clamp-2">${book.titolo}</h3>
             <p class="text-gray-700 mt-2"><i class="fas fa-user-edit text-gray-500 mr-1"></i> ${book.autore}</p>
+            <p class="text-gray-500 text-sm mt-1"><i class="fas fa-calendar-alt mr-1"></i> ${book.publishedDate}</p>
           </div>
           <div class="p-4 pt-2 border-t border-gray-100">
             <a href="${book.annas_archive}" target="_blank" class="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white text-center py-2 px-4 rounded-md text-sm">
