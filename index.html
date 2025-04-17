@@ -8,7 +8,7 @@
     body { font-family: sans-serif; padding: 2em; background: #f9f9f9; }
     button { padding: 1em 2em; font-size: 1.2em; cursor: pointer; }
     .book { margin-top: 1em; padding: 1em; background: white; border-radius: 10px; box-shadow: 0 0 5px #ccc; }
-    img { max-height: 150px; }
+    img { max-height: 150px; display: block; margin-top: 10px; }
   </style>
 </head>
 <body>
@@ -22,28 +22,41 @@
       const risultati = document.getElementById('risultati');
       risultati.innerHTML = '<p>⏳ Sto cercando libri con Gemini AI...</p>';
 
-      const prompt = `Sei un assistente che elenca libri pubblicati negli ultimi 7 giorni in USA e Italia. Elenca SOLO titoli realmente pubblicati da fonti affidabili. Includi solo le seguenti categorie: business, psicologia, self-help, società e filosofia. Per ogni libro mostra:
-- Titolo
-- Autore
-- Link a copertina (se disponibile)
-- Link ad Anna's Archive (se esiste)
-Rispondi in formato JSON come array di oggetti: [{"titolo": "...", "autore": "...", "copertina": "url", "annas_archive": "url"}, ...]`;
+      const prompt = `Rispondi solo in formato JSON puro, senza alcun testo prima o dopo. Elenca i libri realmente pubblicati negli ultimi 7 giorni in USA e Italia, esclusivamente nelle categorie: business, psicologia, self-help, società e filosofia. Per ogni libro includi:
+- "titolo"
+- "autore"
+- "copertina" (URL se disponibile)
+- "annas_archive" (link diretto se disponibile)
+Il risultato deve essere un array JSON tipo:
+[
+  {
+    "titolo": "Esempio di libro",
+    "autore": "Mario Rossi",
+    "copertina": "https://...",
+    "annas_archive": "https://..."
+  }
+]`;
 
-      const response = await fetch("https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=" + key, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: prompt }] }]
-        })
-      });
-
-      const data = await response.json();
       try {
-        const text = data.candidates[0].content.parts[0].text;
-        const json = JSON.parse(text);
+        const response = await fetch("https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=" + key, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            contents: [{ parts: [{ text: prompt }] }]
+          })
+        });
+
+        const data = await response.json();
+        const rawText = data.candidates[0].content.parts[0].text;
+
+        // Estrae il JSON puro con una regex (in caso Gemini aggiunga testo extra)
+        const jsonMatch = rawText.match(/\[.*\]/s);
+        if (!jsonMatch) throw new Error("Nessun JSON trovato");
+
+        const libri = JSON.parse(jsonMatch[0]);
 
         risultati.innerHTML = '';
-        json.forEach(libro => {
+        libri.forEach(libro => {
           risultati.innerHTML += `
             <div class="book">
               <h3>${libro.titolo}</h3>
@@ -54,7 +67,8 @@ Rispondi in formato JSON come array di oggetti: [{"titolo": "...", "autore": "..
           `;
         });
       } catch (e) {
-        risultati.innerHTML = '<p>❌ Errore nella risposta di Gemini. Forse ha restituito testo non in formato JSON.</p>';
+        console.error(e);
+        risultati.innerHTML = '<p>❌ Errore nella risposta di Gemini o formato non valido.</p>';
       }
     }
   </script>
