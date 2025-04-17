@@ -7,102 +7,87 @@
   <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
   <link href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.0.0/css/all.min.css" rel="stylesheet">
   <style>
-    .book-card {
-      transition: transform 0.3s ease;
-      height: 100%;
-    }
-    .book-card:hover {
-      transform: translateY(-5px);
-      box-shadow: 0 10px 20px rgba(0, 0, 0, 0.1);
-    }
-    .loading {
-      display: inline-block;
-      width: 50px;
-      height: 50px;
-      border: 3px solid rgba(79, 70, 229, 0.3);
-      border-radius: 50%;
-      border-top-color: #4f46e5;
-      animation: spin 1s ease-in-out infinite;
-    }
-    @keyframes spin {
-      to { transform: rotate(360deg); }
-    }
-    .book-cover {
-      height: 200px;
-      object-fit: contain;
-    }
+    .book-card { transition: transform 0.3s ease; height: 100%; }
+    .book-card:hover { transform: translateY(-5px); box-shadow: 0 10px 20px rgba(0,0,0,0.1); }
+    .loading { display: inline-block; width:50px; height:50px; border:3px solid rgba(79,70,229,0.3); border-radius:50%; border-top-color:#4f46e5; animation:spin 1s ease-in-out infinite; }
+    @keyframes spin { to{ transform:rotate(360deg); } }
+    .book-cover { height:200px; object-fit:contain; }
   </style>
 </head>
 <body class="min-h-screen bg-gray-50">
   <div class="container mx-auto px-4 py-8">
     <header class="mb-10 text-center">
       <h1 class="text-4xl font-bold text-indigo-700 mb-2">RecentBooks</h1>
-      <p class="text-xl text-gray-600">Trova i libri più recenti nelle categorie Business, Psicologia, Self-Help, Società e Filosofia</p>
+      <p class="text-xl text-gray-600">Libri pubblicati nell'ultima settimana in USA e Italia, categorie Business, Psicologia, Self-Help, Società e Filosofia</p>
     </header>
-
     <div class="text-center mb-8">
-      <button onclick="trovaLibri()" class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 px-6 rounded-full transition-colors inline-flex items-center">
+      <button onclick="trovaLibri()" class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 px-6 rounded-full inline-flex items-center">
         <i class="fas fa-search mr-2"></i> Cerca Libri Recenti
       </button>
     </div>
-
     <div id="loadingIndicator" class="hidden flex justify-center my-8">
       <div class="loading"></div>
     </div>
-
     <div id="resultsSection" class="hidden">
       <h2 class="text-2xl font-semibold text-gray-800 mb-4 text-center">Risultati della ricerca</h2>
       <div id="resultsContainer" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6"></div>
     </div>
   </div>
-
   <script>
     async function trovaLibri() {
       const resultsSection = document.getElementById('resultsSection');
       const resultsContainer = document.getElementById('resultsContainer');
       const loadingIndicator = document.getElementById('loadingIndicator');
-
       resultsContainer.innerHTML = '';
       resultsSection.classList.add('hidden');
       loadingIndicator.classList.remove('hidden');
 
-      const endpoint = "https://www.googleapis.com/books/v1/volumes?q=subject:";
       const categories = ["Business", "Psychology", "Self-Help", "Social Science", "Philosophy"];
-      const maxPerCat = 5;
-      const allBooks = [];
+      const languages = ['en', 'it'];
+      const today = new Date();
+      const oneWeekAgo = new Date(today.getTime() - 7*24*60*60*1000);
+      const maxPerCat = 10;
+      let allBooks = [];
 
-      for (const cat of categories) {
-        const url = `${endpoint}${encodeURIComponent(cat)}&orderBy=newest&maxResults=${maxPerCat}&printType=books`;
-        try {
-          const res = await fetch(url);
-          const data = await res.json();
-          if (data.items) {
+      for (const lang of languages) {
+        for (const cat of categories) {
+          const query = `subject:"${cat}"`;
+          const url = `https://www.googleapis.com/books/v1/volumes?q=${encodeURIComponent(query)}&orderBy=newest&maxResults=${maxPerCat}&langRestrict=${lang}`;
+          try {
+            const res = await fetch(url);
+            const data = await res.json();
+            if (!data.items) continue;
             data.items.forEach(book => {
+              const pub = book.volumeInfo.publishedDate || '';
+              // includi solo se data completa YYYY-MM-DD ed è entro l'ultima settimana
+              const match = pub.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+              if (!match) return;
+              const date = new Date(pub);
+              if (date < oneWeekAgo) return;
               allBooks.push({
-                titolo: book.volumeInfo.title || "Sconosciuto",
-                autore: book.volumeInfo.authors ? book.volumeInfo.authors.join(", ") : "Sconosciuto",
-                copertina: book.volumeInfo.imageLinks?.thumbnail,
+                titolo: book.volumeInfo.title || 'Sconosciuto',
+                autore: book.volumeInfo.authors ? book.volumeInfo.authors.join(', ') : 'Sconosciuto',
+                copertina: book.volumeInfo.imageLinks?.thumbnail?.replace('http:','https:'),
                 annas_archive: `https://annas-archive.org/search?q=${encodeURIComponent(book.volumeInfo.title)}`
               });
             });
+          } catch (e) {
+            console.error(`Errore fetch ${cat} ${lang}:`, e);
           }
-        } catch (e) {
-          console.error(`Errore categoria ${cat}:`, e);
         }
       }
 
       if (allBooks.length === 0) {
-        resultsContainer.innerHTML = '<p class="text-center text-gray-500 col-span-full">❌ Nessun libro trovato o errore nella richiesta.</p>';
+        resultsContainer.innerHTML = '<p class="text-center text-gray-500 col-span-full">❌ Nessun libro recente trovato per i filtri impostati.</p>';
         resultsSection.classList.remove('hidden');
         loadingIndicator.classList.add('hidden');
         return;
       }
 
       allBooks.forEach(book => {
-        const bookCard = document.createElement('div');
-        bookCard.className = 'book-card bg-white rounded-lg shadow-md overflow-hidden flex flex-col';
-
-        bookCard.innerHTML = `
+        const card = document.createElement('div');
+        card.className = 'book-card bg-white rounded-lg shadow-md overflow-hidden flex flex-col';
+        card.innerHTML = `
           <div class="p-4 flex justify-center bg-gray-50">
             <img src="${book.copertina || 'https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.0.0/svgs/solid/book.svg'}" alt="Copertina" class="book-cover">
           </div>
@@ -111,15 +96,11 @@
             <p class="text-gray-700 mt-2"><i class="fas fa-user-edit text-gray-500 mr-1"></i> ${book.autore}</p>
           </div>
           <div class="p-4 pt-2 border-t border-gray-100">
-            <div class="flex space-x-2">
-              <a href="${book.annas_archive}" target="_blank" class="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white text-center py-2 px-4 rounded-md text-sm">
-                <i class="fas fa-book-open mr-1"></i> Anna's Archive
-              </a>
-            </div>
-          </div>
-        `;
-
-        resultsContainer.appendChild(bookCard);
+            <a href="${book.annas_archive}" target="_blank" class="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white text-center py-2 px-4 rounded-md text-sm">
+              <i class="fas fa-book-open mr-1"></i> Anna's Archive
+            </a>
+          </div>`;
+        resultsContainer.appendChild(card);
       });
 
       resultsSection.classList.remove('hidden');
