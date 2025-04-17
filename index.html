@@ -68,69 +68,62 @@
 
       const endpoint = "https://www.googleapis.com/books/v1/volumes?q=subject:";
       const categories = ["Business", "Psychology", "Self-Help", "Social Science", "Philosophy"];
-      const today = new Date();
-      const oneWeekAgo = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000);
+      const maxPerCat = 5;
+      const allBooks = [];
 
-      try {
-        const allBooks = [];
-
-        for (const cat of categories) {
-          const url = `${endpoint}${encodeURIComponent(cat)}&orderBy=newest&maxResults=10&printType=books`;
+      for (const cat of categories) {
+        const url = `${endpoint}${encodeURIComponent(cat)}&orderBy=newest&maxResults=${maxPerCat}&printType=books`;
+        try {
           const res = await fetch(url);
           const data = await res.json();
-
-          if (!data.items) continue;
-
-          const recent = data.items.filter(book => {
-            const date = book.volumeInfo.publishedDate;
-            const pubDate = new Date(date.length === 4 ? `${date}-01-01` : date);
-            return pubDate >= oneWeekAgo;
-          });
-
-          for (const book of recent) {
-            allBooks.push({
-              titolo: book.volumeInfo.title,
-              autore: book.volumeInfo.authors ? book.volumeInfo.authors.join(", ") : "Sconosciuto",
-              copertina: book.volumeInfo.imageLinks?.thumbnail,
-              annas_archive: `https://annas-archive.org/search?q=${encodeURIComponent(book.volumeInfo.title)}`
+          if (data.items) {
+            data.items.forEach(book => {
+              allBooks.push({
+                titolo: book.volumeInfo.title || "Sconosciuto",
+                autore: book.volumeInfo.authors ? book.volumeInfo.authors.join(", ") : "Sconosciuto",
+                copertina: book.volumeInfo.imageLinks?.thumbnail,
+                annas_archive: `https://annas-archive.org/search?q=${encodeURIComponent(book.volumeInfo.title)}`
+              });
             });
           }
+        } catch (e) {
+          console.error(`Errore categoria ${cat}:`, e);
         }
+      }
 
-        if (allBooks.length === 0) throw new Error("Nessun libro trovato nella settimana corrente.");
-
-        allBooks.forEach(book => {
-          const bookCard = document.createElement('div');
-          bookCard.className = 'book-card bg-white rounded-lg shadow-md overflow-hidden flex flex-col';
-
-          bookCard.innerHTML = `
-            <div class="p-4 flex justify-center bg-gray-50">
-              <img src="${book.copertina || 'https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.0.0/svgs/solid/book.svg'}" alt="Copertina" class="book-cover">
-            </div>
-            <div class="p-4 flex-grow">
-              <h3 class="font-bold text-lg text-indigo-700 line-clamp-2">${book.titolo}</h3>
-              <p class="text-gray-700 mt-2"><i class="fas fa-user-edit text-gray-500 mr-1"></i> ${book.autore}</p>
-            </div>
-            <div class="p-4 pt-2 border-t border-gray-100">
-              <div class="flex space-x-2">
-                <a href="${book.annas_archive}" target="_blank" class="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white text-center py-2 px-4 rounded-md text-sm">
-                  <i class="fas fa-book-open mr-1"></i> Anna's Archive
-                </a>
-              </div>
-            </div>
-          `;
-
-          resultsContainer.appendChild(bookCard);
-        });
-
-        resultsSection.classList.remove('hidden');
-      } catch (e) {
-        console.error("Errore durante la ricerca dei libri:", e);
+      if (allBooks.length === 0) {
         resultsContainer.innerHTML = '<p class="text-center text-gray-500 col-span-full">❌ Nessun libro trovato o errore nella richiesta.</p>';
         resultsSection.classList.remove('hidden');
-      } finally {
         loadingIndicator.classList.add('hidden');
+        return;
       }
+
+      allBooks.forEach(book => {
+        const bookCard = document.createElement('div');
+        bookCard.className = 'book-card bg-white rounded-lg shadow-md overflow-hidden flex flex-col';
+
+        bookCard.innerHTML = `
+          <div class="p-4 flex justify-center bg-gray-50">
+            <img src="${book.copertina || 'https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.0.0/svgs/solid/book.svg'}" alt="Copertina" class="book-cover">
+          </div>
+          <div class="p-4 flex-grow">
+            <h3 class="font-bold text-lg text-indigo-700 line-clamp-2">${book.titolo}</h3>
+            <p class="text-gray-700 mt-2"><i class="fas fa-user-edit text-gray-500 mr-1"></i> ${book.autore}</p>
+          </div>
+          <div class="p-4 pt-2 border-t border-gray-100">
+            <div class="flex space-x-2">
+              <a href="${book.annas_archive}" target="_blank" class="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white text-center py-2 px-4 rounded-md text-sm">
+                <i class="fas fa-book-open mr-1"></i> Anna's Archive
+              </a>
+            </div>
+          </div>
+        `;
+
+        resultsContainer.appendChild(bookCard);
+      });
+
+      resultsSection.classList.remove('hidden');
+      loadingIndicator.classList.add('hidden');
     }
   </script>
 </body>
