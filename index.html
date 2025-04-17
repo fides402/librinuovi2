@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>RecentBooks - Nuovi libri recenti</title>
+  <title>RecentBooks - Nuovi libri da negozi</title>
   <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
   <link href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.0.0/css/all.min.css" rel="stylesheet">
   <style>
@@ -18,11 +18,11 @@
   <div class="container mx-auto px-4 py-8">
     <header class="mb-10 text-center">
       <h1 class="text-4xl font-bold text-indigo-700 mb-2">RecentBooks</h1>
-      <p class="text-xl text-gray-600">Libri pubblicati negli ultimi 30 giorni (lingua italiana e inglese) nelle categorie Business, Psicologia, Self-Help, Società e Filosofia</p>
+      <p class="text-xl text-gray-600">Libri pubblicati negli ultimi 30 giorni in USA e Italia<br>categorie: Business, Psicologia, Self-Help, Società e Filosofia (da Google Books API)</p>
     </header>
     <div class="text-center mb-8">
       <button onclick="trovaLibri()" class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 px-6 rounded-full inline-flex items-center">
-        <i class="fas fa-search mr-2"></i> Cerca Nuovi Libri
+        <i class="fas fa-store mr-2"></i> Cerca Nuovi Libri
       </button>
     </div>
     <div id="loadingIndicator" class="hidden flex justify-center my-8">
@@ -42,63 +42,73 @@
       resultsSection.classList.add('hidden');
       loadingIndicator.classList.remove('hidden');
 
-      const categories = ['business','psychology','self-help','social-science','philosophy'];
-      const languages = [{code:'eng',label:'Inglese'},{code:'ita',label:'Italiano'}];
+      const apiKey = 'YOUR_GOOGLE_BOOKS_API_KEY';
+      const categories = ['Business','Psychology','Self-Help','Social Science','Philosophy'];
+      const countries = ['US','IT'];
       const maxPerCat = 10;
-      const oneMonthAgo = Date.now() - 30*24*60*60*1000;
+      const oneMonthAgo = new Date(Date.now() - 30*24*60*60*1000);
       let books = [];
 
-      for (const lang of languages) {
+      for (const country of countries) {
         for (const cat of categories) {
-          const url = `https://openlibrary.org/search.json?subject=${cat}&language=${lang.code}&limit=${maxPerCat}`;
+          const url = `https://www.googleapis.com/books/v1/volumes?q=subject:${encodeURIComponent(cat)}&orderBy=newest&filter=paid-ebooks&maxResults=${maxPerCat}&country=${country}&key=${apiKey}`;
           try {
             const res = await fetch(url);
             const data = await res.json();
-            if (!data.docs) continue;
-            data.docs.forEach(doc => {
-              // OpenLibrary publish_date may be array of strings
-              const dates = doc.publish_date || [];
-              // find a date within last 30 days
-              const recent = dates.find(d => {
-                const dt = Date.parse(d);
-                return !isNaN(dt) && dt >= oneMonthAgo;
-              });
-              if (!recent) return;
-              books.push({
-                titolo: doc.title || 'Sconosciuto',
-                autore: doc.author_name ? doc.author_name.join(', ') : 'Sconosciuto',
-                copertina: doc.cover_i ? `https://covers.openlibrary.org/b/id/${doc.cover_i}-M.jpg` : null,
-                annas_archive: `https://annas-archive.org/search?q=${encodeURIComponent(doc.title)}`
-              });
+            if (!data.items) continue;
+            data.items.forEach(item => {
+              const info = item.volumeInfo;
+              const dateStr = info.publishedDate || '';
+              const date = /^\d{4}-\d{2}-\d{2}$/.test(dateStr) ? new Date(dateStr) : new Date(dateStr + '-01');
+              if (isNaN(date) || date < oneMonthAgo) return;
+              if (item.saleInfo && item.saleInfo.saleability === 'FOR_SALE') {
+                books.push({
+                  titolo: info.title || 'Sconosciuto',
+                  autore: info.authors ? info.authors.join(', ') : 'Sconosciuto',
+                  copertina: info.imageLinks?.thumbnail?.replace('http:','https:'),
+                  buyLink: item.saleInfo.buyLink,
+                  publishedDate: dateStr
+                });
+              }
             });
-          } catch(e) {
-            console.error('OpenLibrary error:',e);
+          } catch (e) {
+            console.error(`Errore fetch ${cat} ${country}:`, e);
           }
         }
       }
       // dedup
-      const seen = new Set(); books = books.filter(b=>{const k=b.titolo+'|'+b.autore;return seen.has(k)?false:seen.add(k)});
-      if (books.length===0) {
-        resultsContainer.innerHTML = '<p class="text-center text-gray-500 col-span-full">❌ Nessun libro recente trovato. Prova più tardi.</p>';
+      const seen = new Set(); books = books.filter(b => {
+        const key = b.titolo + '|' + b.autore;
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
+
+      if (books.length === 0) {
+        resultsContainer.innerHTML = '<p class="text-center text-gray-500 col-span-full">❌ Nessun libro recente disponibile per vendita.</p>';
         resultsSection.classList.remove('hidden'); loadingIndicator.classList.add('hidden'); return;
       }
-      books.forEach(b=>{
-        const card=document.createElement('div');card.className='book-card bg-white rounded-lg shadow-md overflow-hidden flex flex-col';
-        card.innerHTML=`
+
+      books.forEach(b => {
+        const card = document.createElement('div');
+        card.className = 'book-card bg-white rounded-lg shadow-md overflow-hidden flex flex-col';
+        card.innerHTML = `
           <div class="p-4 flex justify-center bg-gray-50">
-            ${(b.copertina)?`<img src="${b.copertina}" alt="Copertina" class="book-cover">`:`<i class="fas fa-book fa-5x text-gray-300"></i>`}
+            ${b.copertina ? `<img src="${b.copertina}" alt="Copertina" class="book-cover">` : `<i class="fas fa-book fa-5x text-gray-300"></i>`}
           </div>
           <div class="p-4 flex-grow">
             <h3 class="font-bold text-lg text-indigo-700 line-clamp-2">${b.titolo}</h3>
             <p class="text-gray-700 mt-2"><i class="fas fa-user-edit text-gray-500 mr-1"></i>${b.autore}</p>
+            <p class="text-gray-500 text-sm mt-1"><i class="fas fa-calendar-alt mr-1"></i>${b.publishedDate}</p>
           </div>
           <div class="p-4 pt-2 border-t border-gray-100">
-            <a href="${b.annas_archive}" target="_blank" class="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white text-center py-2 px-4 rounded-md text-sm">
-              <i class="fas fa-book-open mr-1"></i> Anna's Archive
+            <a href="${b.buyLink}" target="_blank" class="flex-1 bg-green-600 hover:bg-green-700 text-white text-center py-2 px-4 rounded-md text-sm">
+              <i class="fas fa-shopping-cart mr-1"></i> Acquista
             </a>
           </div>`;
         resultsContainer.appendChild(card);
       });
+
       resultsSection.classList.remove('hidden'); loadingIndicator.classList.add('hidden');
     }
   </script>
