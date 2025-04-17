@@ -3,50 +3,52 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>RecentBooks - Libri da Google Books</title>
+  <title>RecentBooks - Nuovi Libri</title>
   <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
   <link href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.0.0/css/all.min.css" rel="stylesheet">
   <style>
-    .book-card { transition: transform 0.3s ease; height:100%; }
+    .loading { display: inline-block; width: 50px; height: 50px; border: 3px solid rgba(79,70,229,0.3); border-radius: 50%; border-top-color: #4f46e5; animation: spin 1s infinite linear; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .book-card { transition: transform 0.3s ease; }
     .book-card:hover { transform: translateY(-5px); box-shadow: 0 10px 20px rgba(0,0,0,0.1); }
-    .loading { display:inline-block; width:50px; height:50px; border:3px solid rgba(79,70,229,0.3); border-radius:50%; border-top-color:#4f46e5; animation:spin 1s ease-in-out infinite; }
-    @keyframes spin { to{ transform:rotate(360deg); } }
-    .book-cover { height:200px; object-fit:contain; }
+    .book-cover { height: 200px; object-fit: contain; }
   </style>
 </head>
 <body class="min-h-screen bg-gray-50">
   <div class="container mx-auto px-4 py-8">
-    <header class="mb-10 text-center">
+    <header class="text-center mb-8">
       <h1 class="text-4xl font-bold text-indigo-700 mb-2">RecentBooks</h1>
-      <p class="text-xl text-gray-600">Nuovi libri (ultimo mese) disponibili per vendita<br>(Categorie: Business, Psicologia, Self-Help, Società, Filosofia)</p>
+      <p class="text-lg text-gray-600">Libri pubblicati nell'ultimo mese, disponibili all'acquisto (Business, Psicologia, Self-Help, Società, Filosofia)</p>
     </header>
-    <div class="text-center mb-8">
-      <button onclick="trovaLibri()" class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 px-6 rounded-full inline-flex items-center">
-        <i class="fas fa-store mr-2"></i> Cerca Nuovi Libri
+    <div class="text-center mb-6">
+      <button id="searchBtn" class="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-3 px-6 rounded-full inline-flex items-center">
+        <i class="fas fa-search mr-2"></i> Cerca Nuovi Libri
       </button>
     </div>
     <div id="loadingIndicator" class="hidden flex justify-center my-8">
       <div class="loading"></div>
     </div>
-    <div id="resultsSection" class="hidden">
+    <section id="resultsSection" class="hidden">
       <h2 class="text-2xl font-semibold text-gray-800 mb-4 text-center">Risultati</h2>
       <div id="resultsContainer" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6"></div>
-    </div>
+    </section>
   </div>
   <script>
+    document.getElementById('searchBtn').addEventListener('click', trovaLibri);
     async function trovaLibri() {
-      const apiKey = 'YOUR_GOOGLE_BOOKS_API_KEY';
+      const apiKey = 'AIzaSyBVtXwnVXilsNqLx6of2HG2jiYwAWs-btg';
       const categories = ['Business','Psychology','Self-Help','Social Science','Philosophy'];
       const languages = ['en','it'];
       const maxPerCat = 20;
-      const oneMonthAgo = new Date(Date.now() - 30*24*60*60*1000);
+      const oneMonthAgo = Date.now() - 30*24*60*60*1000;
 
+      const loading = document.getElementById('loadingIndicator');
       const resultsSection = document.getElementById('resultsSection');
       const resultsContainer = document.getElementById('resultsContainer');
-      const loadingIndicator = document.getElementById('loadingIndicator');
+
       resultsContainer.innerHTML = '';
       resultsSection.classList.add('hidden');
-      loadingIndicator.classList.remove('hidden');
+      loading.classList.remove('hidden');
 
       let allBooks = [];
       for (const lang of languages) {
@@ -55,72 +57,66 @@
           const url = `https://www.googleapis.com/books/v1/volumes?q=${encodeURIComponent(query)}&orderBy=newest&maxResults=${maxPerCat}&langRestrict=${lang}&key=${apiKey}`;
           try {
             const res = await fetch(url);
-            const data = await res.json();
-            if (data.items) {
-              data.items.forEach(item => {
-                const info = item.volumeInfo;
-                const sale = item.saleInfo;
-                if (sale && sale.saleability === 'FOR_SALE') {
-                  const dateStr = info.publishedDate || '';
-                  let pubDate = null;
-                  if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) pubDate = new Date(dateStr);
-                  else if (/^\d{4}-\d{2}$/.test(dateStr)) pubDate = new Date(dateStr + '-01');
-                  else if (/^\d{4}$/.test(dateStr)) pubDate = new Date(dateStr + '-01-01');
-                  if (pubDate && pubDate >= oneMonthAgo) {
-                    allBooks.push({
-                      titolo: info.title || 'Sconosciuto',
-                      autore: info.authors ? info.authors.join(', ') : 'Sconosciuto',
-                      copertina: info.imageLinks?.thumbnail?.replace('http:', 'https:'),
-                      link: sale.buyLink || info.infoLink,
-                      publishedDate: dateStr
-                    });
-                  }
+            const { items } = await res.json();
+            if (!items) continue;
+            items.forEach(item => {
+              const info = item.volumeInfo;
+              const sale = item.saleInfo;
+              if (sale?.saleability === 'FOR_SALE') {
+                const dateStr = info.publishedDate || '';
+                let pub = null;
+                if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) pub = Date.parse(dateStr);
+                else if (/^\d{4}-\d{2}$/.test(dateStr)) pub = Date.parse(dateStr + '-01');
+                else if (/^\d{4}$/.test(dateStr)) pub = Date.parse(dateStr + '-01-01');
+                if (pub && pub >= oneMonthAgo) {
+                  allBooks.push({
+                    title: info.title || 'Sconosciuto',
+                    author: info.authors?.join(', ') || 'Sconosciuto',
+                    cover: info.imageLinks?.thumbnail?.replace('http:', 'https:'),
+                    link: sale.buyLink || info.infoLink,
+                    date: dateStr
+                  });
                 }
-              });
-            }
-          } catch (e) {
-            console.error(`Errore fetch ${cat} ${lang}:`, e);
-          }
+              }
+            });
+          } catch (err) { console.error(err); }
         }
       }
-      // dedup
+      // deduplicate
       const seen = new Set();
       allBooks = allBooks.filter(b => {
-        const key = b.titolo + '|' + b.autore;
+        const key = b.title + '|' + b.author;
         if (seen.has(key)) return false;
         seen.add(key);
         return true;
       });
 
-      if (allBooks.length === 0) {
-        resultsContainer.innerHTML = '<p class="text-center text-gray-500 col-span-full">❌ Nessun libro recente disponibile per vendita.</p>';
+      loading.classList.add('hidden');
+      if (!allBooks.length) {
+        resultsContainer.innerHTML = `<p class="text-center text-gray-500 col-span-full">Nessun libro recente disponibile.</p>`;
         resultsSection.classList.remove('hidden');
-        loadingIndicator.classList.add('hidden');
         return;
       }
-
       allBooks.forEach(b => {
         const card = document.createElement('div');
         card.className = 'book-card bg-white rounded-lg shadow-md overflow-hidden flex flex-col';
         card.innerHTML = `
-          <div class="p-4 flex justify-center bg-gray-50">
-            ${b.copertina ? `<img src="${b.copertina}" alt="Copertina" class="book-cover">` : `<i class="fas fa-book fa-5x text-gray-300"></i>`}
+          <div class="p-4 bg-gray-50 flex justify-center">
+            ${b.cover ? `<img src="${b.cover}" alt="${b.title}" class="book-cover">` : `<i class="fas fa-book fa-5x text-gray-300"></i>`}
           </div>
           <div class="p-4 flex-grow">
-            <h3 class="font-bold text-lg text-indigo-700 line-clamp-2">${b.titolo}</h3>
-            <p class="text-gray-700 mt-2"><i class="fas fa-user-edit text-gray-500 mr-1"></i>${b.autore}</p>
-            <p class="text-gray-500 text-sm mt-1"><i class="fas fa-calendar-alt mr-1"></i>${b.publishedDate}</p>
+            <h3 class="text-indigo-700 font-bold text-lg line-clamp-2">${b.title}</h3>
+            <p class="text-gray-700 mt-1 text-sm">${b.author}</p>
+            <p class="text-gray-500 mt-1 text-xs"><i class="fas fa-calendar-alt mr-1"></i>${b.date}</p>
           </div>
-          <div class="p-4 pt-2 border-t border-gray-100">
-            <a href="${b.link}" target="_blank" class="flex-1 bg-green-600 hover:bg-green-700 text-white text-center py-2 px-4 rounded-md text-sm">
+          <div class="p-4 border-t border-gray-100">
+            <a href="${b.link}" target="_blank" class="block bg-green-600 hover:bg-green-700 text-white text-center py-2 rounded-md text-sm">
               <i class="fas fa-shopping-cart mr-1"></i> Acquista
             </a>
           </div>`;
         resultsContainer.appendChild(card);
       });
-
       resultsSection.classList.remove('hidden');
-      loadingIndicator.classList.add('hidden');
     }
   </script>
 </body>
