@@ -2,8 +2,8 @@ name: Aggiorna catalogo libri
 
 on:
   schedule:
-    - cron: '0 4 * * *'  # Ogni giorno alle 04:00 UTC
-  workflow_dispatch:     # Permette l’avvio manuale da GitHub
+    - cron: '0 4 * * *'  # Ogni giorno alle 04:00 UTC (06:00 italiane)
+  workflow_dispatch:     # Permette di avviarlo manualmente
 
 jobs:
   build:
@@ -21,15 +21,15 @@ jobs:
       - name: Installa dipendenze
         run: pip install requests beautifulsoup4
 
-      - name: Esegui scraping
+      - name: Esegui scraping completo
         run: |
           python scripts/scraper.py
-          echo "✅ Scraping completato"
+          echo "✅ Scraping completato e JSON salvato"
 
       - name: Commit e push aggiornamento
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
-          git add index.html
-          git commit -m "📚 Aggiornamento automatico del catalogo del $(date +%F)" || echo "Nessuna modifica da committare"
+          git add libri_1lib.json
+          git commit -m "📚 Aggiornamento automatico libri JSON del $(date +%F)" || echo "Nessuna modifica da committare"
           git push
